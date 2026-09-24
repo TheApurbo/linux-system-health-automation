@@ -116,7 +116,8 @@ def get_tcp_latency():
 
         return round(latency, 2)
 
-    except Exception:
+    except Exception as error:
+        print(f"Latency check error: {error}")
         return None
 
 
