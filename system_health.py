@@ -3,6 +3,7 @@ import shutil
 import socket
 import subprocess
 import os
+import re
 from datetime import datetime
 
 
@@ -42,14 +43,23 @@ def get_cpu_usage():
 
         line = result.stdout.strip()
 
-        if not line or "id" not in line:
+        if not line:
             return None
 
-        idle = float(line.split("id")[0].split()[-1])
+        match = re.search(r"([\d.,]+)\s*id", line)
+
+        if not match:
+            return None
+
+        idle = float(match.group(1).replace(",", "."))
 
         return round(100 - idle, 2)
 
-    except (ValueError, subprocess.SubprocessError, OSError):
+    except (
+        ValueError,
+        subprocess.SubprocessError,
+        OSError
+    ):
         return None
 
 
@@ -87,7 +97,11 @@ def get_memory_usage():
 
         return round((used / total) * 100, 2)
 
-    except (ValueError, subprocess.SubprocessError, OSError):
+    except (
+        ValueError,
+        subprocess.SubprocessError,
+        OSError
+    ):
         return None
 
 
@@ -136,12 +150,12 @@ def check_dns():
         socket.gethostbyname("google.com")
         return True
 
-    except socket.gaierror:
+    except (socket.gaierror, OSError):
         return False
 
 
 # ==========================================
-# NETWORK INTERFACE DIAGNOSTICS
+# NETWORK INTERFACES
 # ==========================================
 
 def get_network_interfaces():
@@ -163,7 +177,10 @@ def get_network_interfaces():
 
         return output
 
-    except (subprocess.SubprocessError, OSError):
+    except (
+        subprocess.SubprocessError,
+        OSError
+    ):
         return "Unable to retrieve network interfaces."
 
 
@@ -191,11 +208,17 @@ def get_default_gateway():
         parts = output.split()
 
         if "via" in parts:
-            return parts[parts.index("via") + 1]
+            gateway_index = parts.index("via") + 1
+
+            if gateway_index < len(parts):
+                return parts[gateway_index]
 
         return "UNKNOWN"
 
-    except (subprocess.SubprocessError, OSError):
+    except (
+        subprocess.SubprocessError,
+        OSError
+    ):
         return "UNKNOWN"
 
 
@@ -219,13 +242,23 @@ def ping_host(host="8.8.8.8"):
 
             if "time=" in line:
 
-                latency = line.split("time=")[1].split()[0]
+                latency_text = (
+                    line.split("time=")[1]
+                    .split()[0]
+                )
 
-                return float(latency)
+                return float(latency_text)
 
         return None
 
-    except (ValueError, subprocess.SubprocessError, OSError):
+    except FileNotFoundError:
+        return None
+
+    except (
+        ValueError,
+        subprocess.SubprocessError,
+        OSError
+    ):
         return None
 
 
@@ -256,7 +289,10 @@ def get_top_processes():
 
         return output
 
-    except (subprocess.SubprocessError, OSError):
+    except (
+        subprocess.SubprocessError,
+        OSError
+    ):
         return "Unable to retrieve process information."
 
 
@@ -278,7 +314,11 @@ def analyze_logs():
 
     try:
 
-        with open(LOG_FILE, "r", encoding="utf-8") as file:
+        with open(
+            LOG_FILE,
+            "r",
+            encoding="utf-8"
+        ) as file:
 
             for line in file:
 
@@ -294,7 +334,10 @@ def analyze_logs():
                     result["ERROR"] += 1
                     result["ERROR_MESSAGES"].append(line)
 
-    except (OSError, UnicodeError):
+    except (
+        OSError,
+        UnicodeError
+    ):
         pass
 
     return result
@@ -391,12 +434,14 @@ def get_recommendations(
             "Check DNS configuration and test with: nslookup google.com"
         )
 
-    # PING
-    if ping_latency is not None and ping_latency > 100:
+    # LATENCY
+    if ping_latency is not None:
 
-        recommendations.append(
-            "High network latency detected. Check network stability and routing."
-        )
+        if ping_latency > 100:
+
+            recommendations.append(
+                "High network latency detected. Check network stability and routing."
+            )
 
     # LOGS
     if log_analysis["ERROR"] > 0:
@@ -427,7 +472,7 @@ def get_recommendations(
 def generate_report():
 
     # --------------------------------------
-    # COLLECT SYSTEM METRICS
+    # COLLECT METRICS
     # --------------------------------------
 
     cpu = get_cpu_usage()
@@ -450,7 +495,7 @@ def generate_report():
 
 
     # --------------------------------------
-    # EVALUATE RESOURCE STATUS
+    # RESOURCE STATUS
     # --------------------------------------
 
     cpu_status = evaluate_usage(
@@ -473,7 +518,7 @@ def generate_report():
 
 
     # --------------------------------------
-    # DETECT ISSUES
+    # ISSUE DETECTION
     # --------------------------------------
 
     issues = []
@@ -531,7 +576,10 @@ def generate_report():
         )
 
 
-    if ping_latency is not None and ping_latency > 100:
+    if (
+        ping_latency is not None
+        and ping_latency > 100
+    ):
 
         issues.append(
             f"High network latency detected: {ping_latency} ms."
@@ -553,7 +601,7 @@ def generate_report():
 
 
     # --------------------------------------
-    # OVERALL HEALTH
+    # OVERALL STATUS
     # --------------------------------------
 
     if issues:
@@ -594,7 +642,6 @@ def generate_report():
 
     report.append("=" * 60)
 
-
     report.append(
         f"Generated: {datetime.now()}"
     )
@@ -607,7 +654,6 @@ def generate_report():
     report.append(
         "\n[SYSTEM INFORMATION]"
     )
-
 
     for key, value in get_system_info().items():
 
@@ -624,20 +670,17 @@ def generate_report():
         "\n[RESOURCE HEALTH]"
     )
 
-
     report.append(
         f"CPU Usage    : "
         f"{cpu if cpu is not None else 'UNKNOWN'}% "
         f"[{cpu_status}]"
     )
 
-
     report.append(
         f"Memory Usage : "
         f"{memory if memory is not None else 'UNKNOWN'}% "
         f"[{memory_status}]"
     )
-
 
     report.append(
         f"Disk Usage   : "
@@ -654,7 +697,6 @@ def generate_report():
         "\n[NETWORK HEALTH]"
     )
 
-
     report.append(
         "Internet Connectivity : "
         + (
@@ -663,7 +705,6 @@ def generate_report():
             else "FAILED"
         )
     )
-
 
     report.append(
         "DNS Resolution        : "
@@ -683,27 +724,23 @@ def generate_report():
         "\n[NETWORK DIAGNOSTICS]"
     )
 
-
     report.append(
         "Default Gateway       : "
         + gateway
     )
-
 
     report.append(
         "Ping Latency          : "
         + (
             f"{ping_latency} ms"
             if ping_latency is not None
-            else "FAILED"
+            else "UNAVAILABLE"
         )
     )
-
 
     report.append(
         "\nNetwork Interfaces:"
     )
-
 
     report.append(
         network_interfaces
@@ -718,7 +755,6 @@ def generate_report():
         "\n[TOP PROCESSES BY CPU USAGE]"
     )
 
-
     report.append(
         get_top_processes()
     )
@@ -732,31 +768,26 @@ def generate_report():
         "\n[LOG ANALYSIS]"
     )
 
-
     report.append(
         f"INFO entries    : "
         f"{log_analysis['INFO']}"
     )
-
 
     report.append(
         f"WARNING entries : "
         f"{log_analysis['WARNING']}"
     )
 
-
     report.append(
         f"ERROR entries   : "
         f"{log_analysis['ERROR']}"
     )
-
 
     if log_analysis["ERROR_MESSAGES"]:
 
         report.append(
             "\nDetected ERROR messages:"
         )
-
 
         for message in log_analysis["ERROR_MESSAGES"]:
 
@@ -773,7 +804,6 @@ def generate_report():
         "\n[DIAGNOSTIC SUMMARY]"
     )
 
-
     if issues:
 
         for issue in issues:
@@ -788,20 +818,18 @@ def generate_report():
             "No major issues detected."
         )
 
-
     report.append(
         f"\nOverall Status: {overall}"
     )
 
 
     # ======================================
-    # RECOMMENDATIONS
+    # TROUBLESHOOTING RECOMMENDATIONS
     # ======================================
 
     report.append(
         "\n[TROUBLESHOOTING RECOMMENDATIONS]"
     )
-
 
     for recommendation in recommendations:
 
@@ -811,7 +839,7 @@ def generate_report():
 
 
     # ======================================
-    # END REPORT
+    # END OF REPORT
     # ======================================
 
     report.append(
@@ -848,7 +876,6 @@ def generate_report():
             exist_ok=True
         )
 
-
         with open(
             REPORT_FILE,
             "w",
@@ -859,11 +886,9 @@ def generate_report():
                 final_report
             )
 
-
         print(
             f"\nReport saved to: {REPORT_FILE}"
         )
-
 
     except OSError as error:
 
