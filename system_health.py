@@ -33,21 +33,23 @@ def get_cpu_usage():
         result = subprocess.run(
             ["bash", "-c", "top -bn1 | grep 'Cpu(s)'"],
             capture_output=True,
-            text=True
+            text=True,
+            timeout=5
         )
+
+        if result.returncode != 0:
+            return None
 
         line = result.stdout.strip()
 
-        if not line:
+        if not line or "id" not in line:
             return None
 
-        if "id" in line:
-            idle = float(line.split("id")[0].split()[-1])
-            return round(100 - idle, 2)
+        idle = float(line.split("id")[0].split()[-1])
 
-        return None
+        return round(100 - idle, 2)
 
-    except Exception:
+    except (ValueError, subprocess.SubprocessError, OSError):
         return None
 
 
@@ -60,8 +62,12 @@ def get_memory_usage():
         result = subprocess.run(
             ["free", "-m"],
             capture_output=True,
-            text=True
+            text=True,
+            timeout=5
         )
+
+        if result.returncode != 0:
+            return None
 
         lines = result.stdout.splitlines()
 
@@ -70,15 +76,18 @@ def get_memory_usage():
 
         memory = lines[1].split()
 
+        if len(memory) < 3:
+            return None
+
         total = int(memory[1])
         used = int(memory[2])
 
-        if total == 0:
+        if total <= 0:
             return None
 
         return round((used / total) * 100, 2)
 
-    except Exception:
+    except (ValueError, subprocess.SubprocessError, OSError):
         return None
 
 
@@ -90,12 +99,12 @@ def get_disk_usage():
     try:
         total, used, free = shutil.disk_usage("/")
 
-        if total == 0:
+        if total <= 0:
             return None
 
         return round((used / total) * 100, 2)
 
-    except Exception:
+    except OSError:
         return None
 
 
@@ -105,13 +114,15 @@ def get_disk_usage():
 
 def check_network():
     try:
-        socket.create_connection(
+        connection = socket.create_connection(
             ("8.8.8.8", 53),
             timeout=3
         )
+
+        connection.close()
         return True
 
-    except OSError:
+    except (OSError, socket.timeout):
         return False
 
 
@@ -124,7 +135,7 @@ def check_dns():
         socket.gethostbyname("google.com")
         return True
 
-    except socket.error:
+    except socket.gaierror:
         return False
 
 
@@ -141,12 +152,21 @@ def get_top_processes():
                 "ps -eo pid,comm,%cpu,%mem --sort=-%cpu | head -n 6"
             ],
             capture_output=True,
-            text=True
+            text=True,
+            timeout=5
         )
 
-        return result.stdout.strip()
+        if result.returncode != 0:
+            return "Unable to retrieve process information."
 
-    except Exception:
+        output = result.stdout.strip()
+
+        if not output:
+            return "No process information available."
+
+        return output
+
+    except (subprocess.SubprocessError, OSError):
         return "Unable to retrieve process information."
 
 
@@ -167,9 +187,10 @@ def analyze_logs():
         return result
 
     try:
-        with open(LOG_FILE, "r") as file:
+        with open(LOG_FILE, "r", encoding="utf-8") as file:
 
             for line in file:
+
                 line = line.strip()
 
                 if line.startswith("INFO"):
@@ -182,7 +203,7 @@ def analyze_logs():
                     result["ERROR"] += 1
                     result["ERROR_MESSAGES"].append(line)
 
-    except Exception:
+    except (OSError, UnicodeError):
         pass
 
     return result
@@ -272,7 +293,7 @@ def get_recommendations(
 
     if log_analysis["WARNING"] > 0:
         recommendations.append(
-            "Review WARNING entries in logs.log and monitor the affected services."
+            "Review WARNING entries in logs.log and monitor affected services."
         )
 
     if not recommendations:
@@ -338,10 +359,7 @@ def generate_report():
             f"{log_analysis['WARNING']} WARNING entry/entries detected in logs."
         )
 
-    if issues:
-        overall = "ATTENTION REQUIRED"
-    else:
-        overall = "HEALTHY"
+    overall = "ATTENTION REQUIRED" if issues else "HEALTHY"
 
     recommendations = get_recommendations(
         cpu_status,
@@ -401,19 +419,9 @@ def generate_report():
         + ("OK" if dns else "FAILED")
     )
 
-    # ======================================
-    # PROCESS ANALYSIS
-    # ======================================
-
     report.append("\n[TOP PROCESSES BY CPU USAGE]")
 
-    process_info = get_top_processes()
-
-    report.append(process_info)
-
-    # ======================================
-    # LOG ANALYSIS
-    # ======================================
+    report.append(get_top_processes())
 
     report.append("\n[LOG ANALYSIS]")
 
@@ -436,25 +444,15 @@ def generate_report():
         for message in log_analysis["ERROR_MESSAGES"]:
             report.append(f"- {message}")
 
-    # ======================================
-    # DIAGNOSTIC SUMMARY
-    # ======================================
-
     report.append("\n[DIAGNOSTIC SUMMARY]")
 
     if issues:
-
         for issue in issues:
             report.append(f"- {issue}")
-
     else:
         report.append("No major issues detected.")
 
     report.append(f"\nOverall Status: {overall}")
-
-    # ======================================
-    # RECOMMENDATIONS
-    # ======================================
 
     report.append("\n[TROUBLESHOOTING RECOMMENDATIONS]")
 
@@ -477,12 +475,16 @@ def generate_report():
     # SAVE REPORT
     # ======================================
 
-    os.makedirs(REPORT_DIR, exist_ok=True)
+    try:
+        os.makedirs(REPORT_DIR, exist_ok=True)
 
-    with open(REPORT_FILE, "w") as file:
-        file.write(final_report)
+        with open(REPORT_FILE, "w", encoding="utf-8") as file:
+            file.write(final_report)
 
-    print(f"\nReport saved to: {REPORT_FILE}")
+        print(f"\nReport saved to: {REPORT_FILE}")
+
+    except OSError as error:
+        print(f"\nUnable to save report: {error}")
 
 
 # ==========================================
