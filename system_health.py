@@ -28,11 +28,8 @@ def get_cpu_usage():
             shell=True,
             text=True
         )
-
         idle = float(result.split("id,")[0].split()[-1])
-
         return round(100 - idle, 2)
-
     except Exception:
         return None
 
@@ -43,7 +40,6 @@ def get_memory_usage():
             ["free", "-m"],
             text=True
         )
-
         lines = result.splitlines()
         memory_line = lines[1].split()
 
@@ -51,7 +47,6 @@ def get_memory_usage():
         used = int(memory_line[2])
 
         return round((used / total) * 100, 2)
-
     except Exception:
         return None
 
@@ -59,12 +54,7 @@ def get_memory_usage():
 def get_disk_usage():
     try:
         usage = shutil.disk_usage("/")
-
-        return round(
-            (usage.used / usage.total) * 100,
-            2
-        )
-
+        return round((usage.used / usage.total) * 100, 2)
     except Exception:
         return None
 
@@ -75,11 +65,8 @@ def check_network():
             ("8.8.8.8", 53),
             timeout=3
         )
-
         connection.close()
-
         return True
-
     except Exception:
         return False
 
@@ -87,9 +74,7 @@ def check_network():
 def check_dns():
     try:
         socket.gethostbyname("google.com")
-
         return True
-
     except Exception:
         return False
 
@@ -100,9 +85,7 @@ def get_network_interfaces():
             ["ip", "-brief", "addr"],
             text=True
         )
-
         return result.strip()
-
     except Exception:
         return "UNAVAILABLE"
 
@@ -113,52 +96,38 @@ def get_default_gateway():
             ["ip", "route", "show", "default"],
             text=True
         )
-
-        if result.strip():
-            return result.strip()
-
-        return "UNAVAILABLE"
-
+        return result.strip() if result.strip() else "UNAVAILABLE"
     except Exception:
         return "UNAVAILABLE"
 
 
-def get_tcp_latency(
-    host="8.8.8.8",
-    port=53,
-    timeout=3
-):
+def get_tcp_latency():
     try:
         start = time.perf_counter()
 
         connection = socket.create_connection(
-            (host, port),
-            timeout=timeout
+            ("8.8.8.8", 53),
+            timeout=3
         )
 
         connection.close()
 
-        end = time.perf_counter()
-
-        latency = (end - start) * 1000
+        latency = (time.perf_counter() - start) * 1000
 
         return round(latency, 2)
 
-    except (OSError, socket.timeout):
+    except Exception:
         return None
 
 
 def get_top_processes():
     try:
         result = subprocess.check_output(
-            "ps -eo pid,comm,%cpu,%mem "
-            "--sort=-%cpu | head -n 6",
+            "ps -eo pid,comm,%cpu,%mem --sort=-%cpu | head -n 6",
             shell=True,
             text=True
         )
-
         return result.strip()
-
     except Exception:
         return "UNAVAILABLE"
 
@@ -168,7 +137,6 @@ def analyze_logs():
     info_count = 0
     warning_count = 0
     error_count = 0
-
     errors = []
 
     if not os.path.exists(LOG_FILE):
@@ -180,7 +148,6 @@ def analyze_logs():
         }
 
     try:
-
         with open(LOG_FILE, "r") as file:
 
             for line in file:
@@ -208,11 +175,7 @@ def analyze_logs():
     }
 
 
-def evaluate_usage(
-    value,
-    warning,
-    critical
-):
+def evaluate_usage(value, warning, critical):
 
     if value is None:
         return "UNAVAILABLE"
@@ -282,58 +245,27 @@ def get_recommendations(
 
 def generate_report():
 
-    os.makedirs(
-        REPORT_DIR,
-        exist_ok=True
-    )
-
-    # Collect system information
+    os.makedirs(REPORT_DIR, exist_ok=True)
 
     system_info = get_system_info()
 
     cpu = get_cpu_usage()
-
     memory = get_memory_usage()
-
     disk = get_disk_usage()
 
     network_ok = check_network()
-
     dns_ok = check_dns()
 
     interfaces = get_network_interfaces()
-
     gateway = get_default_gateway()
-
     latency = get_tcp_latency()
 
     processes = get_top_processes()
-
     log_data = analyze_logs()
 
-
-    # Evaluate resource health
-
-    cpu_status = evaluate_usage(
-        cpu,
-        70,
-        90
-    )
-
-    memory_status = evaluate_usage(
-        memory,
-        70,
-        90
-    )
-
-    disk_status = evaluate_usage(
-        disk,
-        75,
-        90
-    )
-
-
-    # Overall status
+    cpu_status = evaluate_usage(cpu, 70, 90)
+    memory_status = evaluate_usage(memory, 70, 90)
+    disk_status = evaluate_usage(disk, 75, 90)
 
     overall_status = "HEALTHY"
 
@@ -345,11 +277,7 @@ def generate_report():
         or not dns_ok
         or log_data["ERROR"] > 0
     ):
-
         overall_status = "ATTENTION REQUIRED"
-
-
-    # Recommendations
 
     recommendations = get_recommendations(
         cpu_status,
@@ -360,17 +288,12 @@ def generate_report():
         log_data
     )
 
-
-    # Build report
-
     report = []
 
     report.append("=" * 60)
-
     report.append(
         "LINUX SYSTEM HEALTH & TROUBLESHOOTING REPORT"
     )
-
     report.append("=" * 60)
 
     report.append(
@@ -381,9 +304,6 @@ def generate_report():
     )
 
     report.append("")
-
-
-    # System Information
 
     report.append("[SYSTEM INFORMATION]")
 
@@ -405,78 +325,43 @@ def generate_report():
 
     report.append("")
 
-
-    # Resource Usage
-
     report.append("[RESOURCE USAGE]")
 
-    if cpu is not None:
+    report.append(
+        f"CPU Usage        : {cpu}% ({cpu_status})"
+        if cpu is not None
+        else "CPU Usage        : UNAVAILABLE"
+    )
 
-        report.append(
-            f"CPU Usage        : {cpu}% ({cpu_status})"
-        )
+    report.append(
+        f"Memory Usage     : {memory}% ({memory_status})"
+        if memory is not None
+        else "Memory Usage     : UNAVAILABLE"
+    )
 
-    else:
-
-        report.append(
-            "CPU Usage        : UNAVAILABLE"
-        )
-
-
-    if memory is not None:
-
-        report.append(
-            f"Memory Usage     : {memory}% ({memory_status})"
-        )
-
-    else:
-
-        report.append(
-            "Memory Usage     : UNAVAILABLE"
-        )
-
-
-    if disk is not None:
-
-        report.append(
-            f"Disk Usage       : {disk}% ({disk_status})"
-        )
-
-    else:
-
-        report.append(
-            "Disk Usage       : UNAVAILABLE"
-        )
+    report.append(
+        f"Disk Usage       : {disk}% ({disk_status})"
+        if disk is not None
+        else "Disk Usage       : UNAVAILABLE"
+    )
 
     report.append("")
-
-
-    # Network Diagnostics
 
     report.append("[NETWORK DIAGNOSTICS]")
 
     report.append(
         "Internet Connectivity : "
-        + (
-            "AVAILABLE"
-            if network_ok
-            else "UNAVAILABLE"
-        )
+        + ("AVAILABLE" if network_ok else "UNAVAILABLE")
     )
 
     report.append(
         "DNS Resolution        : "
-        + (
-            "WORKING"
-            if dns_ok
-            else "FAILED"
-        )
+        + ("WORKING" if dns_ok else "FAILED")
     )
 
     report.append("")
 
     report.append("Network Interfaces:")
-
     report.append(interfaces)
 
     report.append("")
@@ -485,42 +370,30 @@ def generate_report():
         f"Default Gateway       : {gateway}"
     )
 
-
-    if latency is not None:
-
-        report.append(
-            f"Network Latency       : {latency} ms"
+    report.append(
+        "Network Latency       : "
+        + (
+            f"{latency} ms"
+            if latency is not None
+            else "UNAVAILABLE"
         )
+    )
 
-        report.append(
-            "Latency Method        : TCP Connection"
+    report.append(
+        "Latency Method        : "
+        + (
+            "TCP Connection"
+            if latency is not None
+            else "Unavailable"
         )
-
-    else:
-
-        report.append(
-            "Network Latency       : UNAVAILABLE"
-        )
-
-        report.append(
-            "Latency Method        : Unavailable"
-        )
+    )
 
     report.append("")
 
-
-    # Top Processes
-
-    report.append(
-        "[TOP PROCESSES BY CPU USAGE]"
-    )
-
+    report.append("[TOP PROCESSES BY CPU USAGE]")
     report.append(processes)
 
     report.append("")
-
-
-    # Log Analysis
 
     report.append("[LOG ANALYSIS]")
 
@@ -536,11 +409,9 @@ def generate_report():
         f"ERROR Entries         : {log_data['ERROR']}"
     )
 
-
     if log_data["ERROR_MESSAGES"]:
 
         report.append("")
-
         report.append("Error Messages:")
 
         for error in log_data["ERROR_MESSAGES"]:
@@ -550,9 +421,6 @@ def generate_report():
             )
 
     report.append("")
-
-
-    # Diagnostic Summary
 
     report.append("[DIAGNOSTIC SUMMARY]")
 
@@ -574,40 +442,24 @@ def generate_report():
 
     report.append(
         "Network Connectivity  : "
-        + (
-            "AVAILABLE"
-            if network_ok
-            else "UNAVAILABLE"
-        )
+        + ("AVAILABLE" if network_ok else "UNAVAILABLE")
     )
 
     report.append(
         "DNS Status            : "
+        + ("WORKING" if dns_ok else "FAILED")
+    )
+
+    report.append(
+        "Network Latency       : "
         + (
-            "WORKING"
-            if dns_ok
-            else "FAILED"
+            f"{latency} ms (TCP Connection)"
+            if latency is not None
+            else "UNAVAILABLE"
         )
     )
 
-
-    if latency is not None:
-
-        report.append(
-            f"Network Latency       : "
-            f"{latency} ms (TCP Connection)"
-        )
-
-    else:
-
-        report.append(
-            "Network Latency       : UNAVAILABLE"
-        )
-
     report.append("")
-
-
-    # Troubleshooting Recommendations
 
     report.append(
         "[TROUBLESHOOTING RECOMMENDATIONS]"
@@ -623,32 +475,18 @@ def generate_report():
 
     report.append("=" * 60)
 
-
-    # Final report
-
     final_report = "\n".join(report)
-
 
     print(final_report)
 
-
-    # Save report
-
-    with open(
-        REPORT_FILE,
-        "w"
-    ) as file:
-
+    with open(REPORT_FILE, "w") as file:
         file.write(final_report)
 
-
     print("")
-
     print(
         f"Report saved to {REPORT_FILE}"
     )
 
 
 if __name__ == "__main__":
-
     generate_report()
