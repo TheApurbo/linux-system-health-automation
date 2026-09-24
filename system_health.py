@@ -8,6 +8,7 @@ from datetime import datetime
 
 REPORT_DIR = "reports"
 REPORT_FILE = os.path.join(REPORT_DIR, "system_health_report.txt")
+LOG_FILE = "logs.log"
 
 
 # ==========================================
@@ -128,6 +129,66 @@ def check_dns():
 
 
 # ==========================================
+# PROCESS ANALYSIS
+# ==========================================
+
+def get_top_processes():
+    try:
+        result = subprocess.run(
+            [
+                "bash",
+                "-c",
+                "ps -eo pid,comm,%cpu,%mem --sort=-%cpu | head -n 6"
+            ],
+            capture_output=True,
+            text=True
+        )
+
+        return result.stdout.strip()
+
+    except Exception:
+        return "Unable to retrieve process information."
+
+
+# ==========================================
+# LOG ANALYSIS
+# ==========================================
+
+def analyze_logs():
+
+    result = {
+        "INFO": 0,
+        "WARNING": 0,
+        "ERROR": 0,
+        "ERROR_MESSAGES": []
+    }
+
+    if not os.path.exists(LOG_FILE):
+        return result
+
+    try:
+        with open(LOG_FILE, "r") as file:
+
+            for line in file:
+                line = line.strip()
+
+                if line.startswith("INFO"):
+                    result["INFO"] += 1
+
+                elif line.startswith("WARNING"):
+                    result["WARNING"] += 1
+
+                elif line.startswith("ERROR"):
+                    result["ERROR"] += 1
+                    result["ERROR_MESSAGES"].append(line)
+
+    except Exception:
+        pass
+
+    return result
+
+
+# ==========================================
 # STATUS EVALUATION
 # ==========================================
 
@@ -154,7 +215,8 @@ def get_recommendations(
     memory_status,
     disk_status,
     network,
-    dns
+    dns,
+    log_analysis
 ):
 
     recommendations = []
@@ -203,6 +265,16 @@ def get_recommendations(
             "Check DNS configuration and test with: nslookup google.com"
         )
 
+    if log_analysis["ERROR"] > 0:
+        recommendations.append(
+            "Review ERROR entries in logs.log for system troubleshooting."
+        )
+
+    if log_analysis["WARNING"] > 0:
+        recommendations.append(
+            "Review WARNING entries in logs.log and monitor the affected services."
+        )
+
     if not recommendations:
         recommendations.append(
             "No immediate troubleshooting action required."
@@ -223,6 +295,8 @@ def generate_report():
 
     network = check_network()
     dns = check_dns()
+
+    log_analysis = analyze_logs()
 
     cpu_status = evaluate_usage(cpu, 70, 90)
     memory_status = evaluate_usage(memory, 70, 90)
@@ -254,6 +328,16 @@ def generate_report():
     if not dns:
         issues.append("DNS resolution failed.")
 
+    if log_analysis["ERROR"] > 0:
+        issues.append(
+            f"{log_analysis['ERROR']} ERROR entry/entries detected in logs."
+        )
+
+    if log_analysis["WARNING"] > 0:
+        issues.append(
+            f"{log_analysis['WARNING']} WARNING entry/entries detected in logs."
+        )
+
     if issues:
         overall = "ATTENTION REQUIRED"
     else:
@@ -264,7 +348,8 @@ def generate_report():
         memory_status,
         disk_status,
         network,
-        dns
+        dns,
+        log_analysis
     )
 
     # ======================================
@@ -316,15 +401,60 @@ def generate_report():
         + ("OK" if dns else "FAILED")
     )
 
+    # ======================================
+    # PROCESS ANALYSIS
+    # ======================================
+
+    report.append("\n[TOP PROCESSES BY CPU USAGE]")
+
+    process_info = get_top_processes()
+
+    report.append(process_info)
+
+    # ======================================
+    # LOG ANALYSIS
+    # ======================================
+
+    report.append("\n[LOG ANALYSIS]")
+
+    report.append(
+        f"INFO entries    : {log_analysis['INFO']}"
+    )
+
+    report.append(
+        f"WARNING entries : {log_analysis['WARNING']}"
+    )
+
+    report.append(
+        f"ERROR entries   : {log_analysis['ERROR']}"
+    )
+
+    if log_analysis["ERROR_MESSAGES"]:
+
+        report.append("\nDetected ERROR messages:")
+
+        for message in log_analysis["ERROR_MESSAGES"]:
+            report.append(f"- {message}")
+
+    # ======================================
+    # DIAGNOSTIC SUMMARY
+    # ======================================
+
     report.append("\n[DIAGNOSTIC SUMMARY]")
 
     if issues:
+
         for issue in issues:
             report.append(f"- {issue}")
+
     else:
         report.append("No major issues detected.")
 
     report.append(f"\nOverall Status: {overall}")
+
+    # ======================================
+    # RECOMMENDATIONS
+    # ======================================
 
     report.append("\n[TROUBLESHOOTING RECOMMENDATIONS]")
 
