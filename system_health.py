@@ -4,6 +4,7 @@ import socket
 import subprocess
 import os
 import re
+import time
 from datetime import datetime
 
 
@@ -223,7 +224,7 @@ def get_default_gateway():
 
 
 # ==========================================
-# PING / LATENCY TEST
+# ICMP PING LATENCY
 # ==========================================
 
 def ping_host(host="8.8.8.8"):
@@ -260,6 +261,64 @@ def ping_host(host="8.8.8.8"):
         OSError
     ):
         return None
+
+
+# ==========================================
+# TCP LATENCY FALLBACK
+# ==========================================
+
+def tcp_latency(host="8.8.8.8", port=53):
+    try:
+        start_time = time.perf_counter()
+
+        connection = socket.create_connection(
+            (host, port),
+            timeout=3
+        )
+
+        connection.close()
+
+        end_time = time.perf_counter()
+
+        latency = (end_time - start_time) * 1000
+
+        return round(latency, 2)
+
+    except (
+        OSError,
+        socket.timeout
+    ):
+        return None
+
+
+# ==========================================
+# SMART LATENCY TEST
+# ==========================================
+
+def get_network_latency():
+
+    # Try ICMP ping first
+    ping_latency = ping_host()
+
+    if ping_latency is not None:
+        return {
+            "latency": ping_latency,
+            "method": "ICMP Ping"
+        }
+
+    # Fallback to TCP connection timing
+    tcp_latency_value = tcp_latency()
+
+    if tcp_latency_value is not None:
+        return {
+            "latency": tcp_latency_value,
+            "method": "TCP Connection"
+        }
+
+    return {
+        "latency": None,
+        "method": "Unavailable"
+    }
 
 
 # ==========================================
@@ -372,7 +431,7 @@ def get_recommendations(
     network,
     dns,
     log_analysis,
-    ping_latency
+    latency
 ):
 
     recommendations = []
@@ -435,9 +494,9 @@ def get_recommendations(
         )
 
     # LATENCY
-    if ping_latency is not None:
+    if latency is not None:
 
-        if ping_latency > 100:
+        if latency > 100:
 
             recommendations.append(
                 "High network latency detected. Check network stability and routing."
@@ -489,7 +548,11 @@ def generate_report():
 
     gateway = get_default_gateway()
 
-    ping_latency = ping_host()
+    latency_result = get_network_latency()
+
+    latency = latency_result["latency"]
+
+    latency_method = latency_result["method"]
 
     log_analysis = analyze_logs()
 
@@ -576,13 +639,10 @@ def generate_report():
         )
 
 
-    if (
-        ping_latency is not None
-        and ping_latency > 100
-    ):
+    if latency is not None and latency > 100:
 
         issues.append(
-            f"High network latency detected: {ping_latency} ms."
+            f"High network latency detected: {latency} ms."
         )
 
 
@@ -624,7 +684,7 @@ def generate_report():
         network,
         dns,
         log_analysis,
-        ping_latency
+        latency
     )
 
 
@@ -730,12 +790,17 @@ def generate_report():
     )
 
     report.append(
-        "Ping Latency          : "
+        "Latency               : "
         + (
-            f"{ping_latency} ms"
-            if ping_latency is not None
+            f"{latency} ms"
+            if latency is not None
             else "UNAVAILABLE"
         )
+    )
+
+    report.append(
+        "Latency Method        : "
+        + latency_method
     )
 
     report.append(
