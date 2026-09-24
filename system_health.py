@@ -2,7 +2,12 @@ import platform
 import shutil
 import socket
 import subprocess
+import os
 from datetime import datetime
+
+
+REPORT_DIR = "reports"
+REPORT_FILE = os.path.join(REPORT_DIR, "system_health_report.txt")
 
 
 # ==========================================
@@ -37,8 +42,7 @@ def get_cpu_usage():
 
         if "id" in line:
             idle = float(line.split("id")[0].split()[-1])
-            usage = 100 - idle
-            return round(usage, 2)
+            return round(100 - idle, 2)
 
         return None
 
@@ -71,9 +75,7 @@ def get_memory_usage():
         if total == 0:
             return None
 
-        usage = (used / total) * 100
-
-        return round(usage, 2)
+        return round((used / total) * 100, 2)
 
     except Exception:
         return None
@@ -90,16 +92,14 @@ def get_disk_usage():
         if total == 0:
             return None
 
-        usage = (used / total) * 100
-
-        return round(usage, 2)
+        return round((used / total) * 100, 2)
 
     except Exception:
         return None
 
 
 # ==========================================
-# NETWORK CONNECTIVITY CHECK
+# NETWORK CHECK
 # ==========================================
 
 def check_network():
@@ -108,7 +108,6 @@ def check_network():
             ("8.8.8.8", 53),
             timeout=3
         )
-
         return True
 
     except OSError:
@@ -129,7 +128,7 @@ def check_dns():
 
 
 # ==========================================
-# USAGE STATUS EVALUATION
+# STATUS EVALUATION
 # ==========================================
 
 def evaluate_usage(value, warning, critical):
@@ -160,7 +159,6 @@ def get_recommendations(
 
     recommendations = []
 
-    # CPU recommendations
     if cpu_status == "CRITICAL":
         recommendations.append(
             "Check high-CPU processes using: top or htop"
@@ -171,7 +169,6 @@ def get_recommendations(
             "Review running processes and unnecessary services."
         )
 
-    # Memory recommendations
     if memory_status == "CRITICAL":
         recommendations.append(
             "Check memory-consuming processes using: ps aux --sort=-%mem"
@@ -182,7 +179,6 @@ def get_recommendations(
             "Close unnecessary applications or services."
         )
 
-    # Disk recommendations
     if disk_status == "CRITICAL":
         recommendations.append(
             "Find large files using: du -sh /*"
@@ -193,7 +189,6 @@ def get_recommendations(
             "Clean unnecessary files, logs, and cached packages."
         )
 
-    # Network recommendations
     if not network:
         recommendations.append(
             "Check network interfaces using: ip addr"
@@ -203,13 +198,11 @@ def get_recommendations(
             "Test connectivity using: ping 8.8.8.8"
         )
 
-    # DNS recommendations
     if not dns:
         recommendations.append(
             "Check DNS configuration and test with: nslookup google.com"
         )
 
-    # No problems
     if not recommendations:
         recommendations.append(
             "No immediate troubleshooting action required."
@@ -224,7 +217,6 @@ def get_recommendations(
 
 def generate_report():
 
-    # Collect system data
     cpu = get_cpu_usage()
     memory = get_memory_usage()
     disk = get_disk_usage()
@@ -232,146 +224,40 @@ def generate_report():
     network = check_network()
     dns = check_dns()
 
-    # Evaluate system health
     cpu_status = evaluate_usage(cpu, 70, 90)
     memory_status = evaluate_usage(memory, 70, 90)
     disk_status = evaluate_usage(disk, 80, 90)
 
-    # ======================================
-    # REPORT HEADER
-    # ======================================
-
-    print("=" * 60)
-    print("          LINUX SYSTEM HEALTH REPORT")
-    print("=" * 60)
-
-    print(f"Generated: {datetime.now()}")
-
-    # ======================================
-    # SYSTEM INFORMATION
-    # ======================================
-
-    print("\n[SYSTEM INFORMATION]")
-
-    system_info = get_system_info()
-
-    for key, value in system_info.items():
-        print(f"{key}: {value}")
-
-    # ======================================
-    # RESOURCE HEALTH
-    # ======================================
-
-    print("\n[RESOURCE HEALTH]")
-
-    if cpu is not None:
-        print(
-            f"CPU Usage    : {cpu}%  [{cpu_status}]"
-        )
-    else:
-        print("CPU Usage    : UNKNOWN")
-
-    if memory is not None:
-        print(
-            f"Memory Usage : {memory}%  [{memory_status}]"
-        )
-    else:
-        print("Memory Usage : UNKNOWN")
-
-    if disk is not None:
-        print(
-            f"Disk Usage   : {disk}%  [{disk_status}]"
-        )
-    else:
-        print("Disk Usage   : UNKNOWN")
-
-    # ======================================
-    # NETWORK HEALTH
-    # ======================================
-
-    print("\n[NETWORK HEALTH]")
-
-    print(
-        "Internet Connectivity : "
-        + ("CONNECTED" if network else "FAILED")
-    )
-
-    print(
-        "DNS Resolution        : "
-        + ("OK" if dns else "FAILED")
-    )
-
-    # ======================================
-    # DIAGNOSTIC SUMMARY
-    # ======================================
-
-    print("\n[DIAGNOSTIC SUMMARY]")
-
     issues = []
 
     if cpu_status == "CRITICAL":
-        issues.append(
-            "CPU usage is critically high."
-        )
+        issues.append("CPU usage is critically high.")
 
     elif cpu_status == "WARNING":
-        issues.append(
-            "CPU usage is above the recommended level."
-        )
+        issues.append("CPU usage is above the recommended level.")
 
     if memory_status == "CRITICAL":
-        issues.append(
-            "Memory usage is critically high."
-        )
+        issues.append("Memory usage is critically high.")
 
     elif memory_status == "WARNING":
-        issues.append(
-            "Memory usage is above the recommended level."
-        )
+        issues.append("Memory usage is above the recommended level.")
 
     if disk_status == "CRITICAL":
-        issues.append(
-            "Disk usage is critically high."
-        )
+        issues.append("Disk usage is critically high.")
 
     elif disk_status == "WARNING":
-        issues.append(
-            "Disk usage is above the recommended level."
-        )
+        issues.append("Disk usage is above the recommended level.")
 
     if not network:
-        issues.append(
-            "Internet connectivity check failed."
-        )
+        issues.append("Internet connectivity check failed.")
 
     if not dns:
-        issues.append(
-            "DNS resolution failed."
-        )
+        issues.append("DNS resolution failed.")
 
-    # ======================================
-    # OVERALL STATUS
-    # ======================================
-
-    if not issues:
-
-        print("No major issues detected.")
-        overall = "HEALTHY"
-
-    else:
-
-        for issue in issues:
-            print(f"- {issue}")
-
+    if issues:
         overall = "ATTENTION REQUIRED"
-
-    print("\nOverall Status:", overall)
-
-    # ======================================
-    # TROUBLESHOOTING
-    # ======================================
-
-    print("\n[TROUBLESHOOTING RECOMMENDATIONS]")
+    else:
+        overall = "HEALTHY"
 
     recommendations = get_recommendations(
         cpu_status,
@@ -381,16 +267,92 @@ def generate_report():
         dns
     )
 
+    # ======================================
+    # BUILD REPORT
+    # ======================================
+
+    report = []
+
+    report.append("=" * 60)
+    report.append("          LINUX SYSTEM HEALTH REPORT")
+    report.append("=" * 60)
+
+    report.append(f"Generated: {datetime.now()}")
+
+    report.append("\n[SYSTEM INFORMATION]")
+
+    for key, value in get_system_info().items():
+        report.append(f"{key}: {value}")
+
+    report.append("\n[RESOURCE HEALTH]")
+
+    report.append(
+        f"CPU Usage    : "
+        f"{cpu if cpu is not None else 'UNKNOWN'}% "
+        f"[{cpu_status}]"
+    )
+
+    report.append(
+        f"Memory Usage : "
+        f"{memory if memory is not None else 'UNKNOWN'}% "
+        f"[{memory_status}]"
+    )
+
+    report.append(
+        f"Disk Usage   : "
+        f"{disk if disk is not None else 'UNKNOWN'}% "
+        f"[{disk_status}]"
+    )
+
+    report.append("\n[NETWORK HEALTH]")
+
+    report.append(
+        "Internet Connectivity : "
+        + ("CONNECTED" if network else "FAILED")
+    )
+
+    report.append(
+        "DNS Resolution        : "
+        + ("OK" if dns else "FAILED")
+    )
+
+    report.append("\n[DIAGNOSTIC SUMMARY]")
+
+    if issues:
+        for issue in issues:
+            report.append(f"- {issue}")
+    else:
+        report.append("No major issues detected.")
+
+    report.append(f"\nOverall Status: {overall}")
+
+    report.append("\n[TROUBLESHOOTING RECOMMENDATIONS]")
+
     for recommendation in recommendations:
-        print(f"- {recommendation}")
+        report.append(f"- {recommendation}")
+
+    report.append("\n" + "=" * 60)
+    report.append("             END OF HEALTH REPORT")
+    report.append("=" * 60)
+
+    final_report = "\n".join(report)
 
     # ======================================
-    # REPORT FOOTER
+    # PRINT REPORT
     # ======================================
 
-    print("\n" + "=" * 60)
-    print("             END OF HEALTH REPORT")
-    print("=" * 60)
+    print(final_report)
+
+    # ======================================
+    # SAVE REPORT
+    # ======================================
+
+    os.makedirs(REPORT_DIR, exist_ok=True)
+
+    with open(REPORT_FILE, "w") as file:
+        file.write(final_report)
+
+    print(f"\nReport saved to: {REPORT_FILE}")
 
 
 # ==========================================
