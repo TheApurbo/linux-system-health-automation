@@ -5,6 +5,7 @@ import subprocess
 import os
 import re
 import time
+import urllib.request
 from datetime import datetime
 
 
@@ -292,28 +293,80 @@ def tcp_latency(host="8.8.8.8", port=53):
 
 
 # ==========================================
-# SMART LATENCY TEST
+# HTTP LATENCY FALLBACK
+# ==========================================
+
+def http_latency(url="https://www.google.com"):
+    try:
+        request = urllib.request.Request(
+            url,
+            method="HEAD",
+            headers={
+                "User-Agent": "Linux-System-Health-Automation"
+            }
+        )
+
+        start_time = time.perf_counter()
+
+        with urllib.request.urlopen(
+            request,
+            timeout=5
+        ) as response:
+
+            response.read(1)
+
+        end_time = time.perf_counter()
+
+        latency = (end_time - start_time) * 1000
+
+        return round(latency, 2)
+
+    except (
+        OSError,
+        urllib.error.URLError,
+        TimeoutError
+    ):
+        return None
+
+
+# ==========================================
+# SMART NETWORK LATENCY
 # ==========================================
 
 def get_network_latency():
 
-    # Try ICMP ping first
+    # First: ICMP Ping
     ping_latency = ping_host()
 
     if ping_latency is not None:
+
         return {
             "latency": ping_latency,
             "method": "ICMP Ping"
         }
 
-    # Fallback to TCP connection timing
+
+    # Second: TCP Connection
     tcp_latency_value = tcp_latency()
 
     if tcp_latency_value is not None:
+
         return {
             "latency": tcp_latency_value,
             "method": "TCP Connection"
         }
+
+
+    # Third: HTTP Request
+    http_latency_value = http_latency()
+
+    if http_latency_value is not None:
+
+        return {
+            "latency": http_latency_value,
+            "method": "HTTP Request"
+        }
+
 
     return {
         "latency": None,
@@ -449,6 +502,7 @@ def get_recommendations(
             "Review running processes and unnecessary services."
         )
 
+
     # MEMORY
     if memory_status == "CRITICAL":
 
@@ -461,6 +515,7 @@ def get_recommendations(
         recommendations.append(
             "Close unnecessary applications or services."
         )
+
 
     # DISK
     if disk_status == "CRITICAL":
@@ -475,6 +530,7 @@ def get_recommendations(
             "Clean unnecessary files, logs, and cached packages."
         )
 
+
     # NETWORK
     if not network:
 
@@ -486,6 +542,7 @@ def get_recommendations(
             "Test connectivity using: ping 8.8.8.8"
         )
 
+
     # DNS
     if not dns:
 
@@ -493,14 +550,17 @@ def get_recommendations(
             "Check DNS configuration and test with: nslookup google.com"
         )
 
+
     # LATENCY
     if latency is not None:
 
         if latency > 100:
 
             recommendations.append(
-                "High network latency detected. Check network stability and routing."
+                "High network latency detected. "
+                "Check network stability and routing."
             )
+
 
     # LOGS
     if log_analysis["ERROR"] > 0:
@@ -509,17 +569,20 @@ def get_recommendations(
             "Review ERROR entries in logs.log for system troubleshooting."
         )
 
+
     if log_analysis["WARNING"] > 0:
 
         recommendations.append(
             "Review WARNING entries in logs.log and monitor affected services."
         )
 
+
     if not recommendations:
 
         recommendations.append(
             "No immediate troubleshooting action required."
         )
+
 
     return recommendations
 
@@ -585,6 +648,7 @@ def generate_report():
     # --------------------------------------
 
     issues = []
+
 
     if cpu_status == "CRITICAL":
 
@@ -694,6 +758,7 @@ def generate_report():
 
     report = []
 
+
     report.append("=" * 60)
 
     report.append(
@@ -790,7 +855,7 @@ def generate_report():
     )
 
     report.append(
-        "Latency               : "
+        "Network Latency       : "
         + (
             f"{latency} ms"
             if latency is not None
@@ -848,6 +913,7 @@ def generate_report():
         f"{log_analysis['ERROR']}"
     )
 
+
     if log_analysis["ERROR_MESSAGES"]:
 
         report.append(
@@ -869,7 +935,59 @@ def generate_report():
         "\n[DIAGNOSTIC SUMMARY]"
     )
 
+    report.append(
+        "Internet Connectivity : "
+        + (
+            "PASS"
+            if network
+            else "FAIL"
+        )
+    )
+
+    report.append(
+        "DNS Resolution        : "
+        + (
+            "PASS"
+            if dns
+            else "FAIL"
+        )
+    )
+
+    report.append(
+        "Network Latency       : "
+        + (
+            f"{latency} ms ({latency_method})"
+            if latency is not None
+            else "UNAVAILABLE"
+        )
+    )
+
+    report.append(
+        f"CPU Health            : {cpu_status}"
+    )
+
+    report.append(
+        f"Memory Health         : {memory_status}"
+    )
+
+    report.append(
+        f"Disk Health           : {disk_status}"
+    )
+
+    report.append(
+        f"Log Errors            : {log_analysis['ERROR']}"
+    )
+
+    report.append(
+        f"Log Warnings          : {log_analysis['WARNING']}"
+    )
+
+
     if issues:
+
+        report.append(
+            "\nDetected Issues:"
+        )
 
         for issue in issues:
 
@@ -880,8 +998,9 @@ def generate_report():
     else:
 
         report.append(
-            "No major issues detected."
+            "\nNo major issues detected."
         )
+
 
     report.append(
         f"\nOverall Status: {overall}"
