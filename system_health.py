@@ -5,7 +5,6 @@ import subprocess
 import os
 import re
 import time
-import urllib.request
 from datetime import datetime
 
 
@@ -43,17 +42,17 @@ def get_cpu_usage():
         if result.returncode != 0:
             return None
 
-        line = result.stdout.strip()
-
-        if not line:
-            return None
-
-        match = re.search(r"([\d.,]+)\s*id", line)
+        match = re.search(
+            r"([\d.,]+)\s*id",
+            result.stdout
+        )
 
         if not match:
             return None
 
-        idle = float(match.group(1).replace(",", "."))
+        idle = float(
+            match.group(1).replace(",", ".")
+        )
 
         return round(100 - idle, 2)
 
@@ -86,18 +85,21 @@ def get_memory_usage():
         if len(lines) < 2:
             return None
 
-        memory = lines[1].split()
+        values = lines[1].split()
 
-        if len(memory) < 3:
+        if len(values) < 3:
             return None
 
-        total = int(memory[1])
-        used = int(memory[2])
+        total = int(values[1])
+        used = int(values[2])
 
         if total <= 0:
             return None
 
-        return round((used / total) * 100, 2)
+        return round(
+            (used / total) * 100,
+            2
+        )
 
     except (
         ValueError,
@@ -118,7 +120,10 @@ def get_disk_usage():
         if total <= 0:
             return None
 
-        return round((used / total) * 100, 2)
+        return round(
+            (used / total) * 100,
+            2
+        )
 
     except OSError:
         return None
@@ -210,10 +215,10 @@ def get_default_gateway():
         parts = output.split()
 
         if "via" in parts:
-            gateway_index = parts.index("via") + 1
+            index = parts.index("via") + 1
 
-            if gateway_index < len(parts):
-                return parts[gateway_index]
+            if index < len(parts):
+                return parts[index]
 
         return "UNKNOWN"
 
@@ -225,63 +230,29 @@ def get_default_gateway():
 
 
 # ==========================================
-# ICMP PING LATENCY
+# TCP NETWORK LATENCY
 # ==========================================
 
-def ping_host(host="8.8.8.8"):
+def get_tcp_latency(
+    host="8.8.8.8",
+    port=53,
+    timeout=3
+):
     try:
-        result = subprocess.run(
-            ["ping", "-c", "1", "-W", "2", host],
-            capture_output=True,
-            text=True,
-            timeout=5
-        )
-
-        if result.returncode != 0:
-            return None
-
-        for line in result.stdout.splitlines():
-
-            if "time=" in line:
-
-                latency_text = (
-                    line.split("time=")[1]
-                    .split()[0]
-                )
-
-                return float(latency_text)
-
-        return None
-
-    except FileNotFoundError:
-        return None
-
-    except (
-        ValueError,
-        subprocess.SubprocessError,
-        OSError
-    ):
-        return None
-
-
-# ==========================================
-# TCP LATENCY FALLBACK
-# ==========================================
-
-def tcp_latency(host="8.8.8.8", port=53):
-    try:
-        start_time = time.perf_counter()
+        start = time.perf_counter()
 
         connection = socket.create_connection(
             (host, port),
-            timeout=3
+            timeout=timeout
         )
 
         connection.close()
 
-        end_time = time.perf_counter()
+        end = time.perf_counter()
 
-        latency = (end_time - start_time) * 1000
+        latency = (
+            end - start
+        ) * 1000
 
         return round(latency, 2)
 
@@ -290,88 +261,6 @@ def tcp_latency(host="8.8.8.8", port=53):
         socket.timeout
     ):
         return None
-
-
-# ==========================================
-# HTTP LATENCY FALLBACK
-# ==========================================
-
-def http_latency(url="https://www.google.com"):
-    try:
-        request = urllib.request.Request(
-            url,
-            method="HEAD",
-            headers={
-                "User-Agent": "Linux-System-Health-Automation"
-            }
-        )
-
-        start_time = time.perf_counter()
-
-        with urllib.request.urlopen(
-            request,
-            timeout=5
-        ) as response:
-
-            response.read(1)
-
-        end_time = time.perf_counter()
-
-        latency = (end_time - start_time) * 1000
-
-        return round(latency, 2)
-
-    except (
-        OSError,
-        urllib.error.URLError,
-        TimeoutError
-    ):
-        return None
-
-
-# ==========================================
-# SMART NETWORK LATENCY
-# ==========================================
-
-def get_network_latency():
-
-    # First: ICMP Ping
-    ping_latency = ping_host()
-
-    if ping_latency is not None:
-
-        return {
-            "latency": ping_latency,
-            "method": "ICMP Ping"
-        }
-
-
-    # Second: TCP Connection
-    tcp_latency_value = tcp_latency()
-
-    if tcp_latency_value is not None:
-
-        return {
-            "latency": tcp_latency_value,
-            "method": "TCP Connection"
-        }
-
-
-    # Third: HTTP Request
-    http_latency_value = http_latency()
-
-    if http_latency_value is not None:
-
-        return {
-            "latency": http_latency_value,
-            "method": "HTTP Request"
-        }
-
-
-    return {
-        "latency": None,
-        "method": "Unavailable"
-    }
 
 
 # ==========================================
@@ -384,7 +273,8 @@ def get_top_processes():
             [
                 "bash",
                 "-c",
-                "ps -eo pid,comm,%cpu,%mem --sort=-%cpu | head -n 6"
+                "ps -eo pid,comm,%cpu,%mem "
+                "--sort=-%cpu | head -n 6"
             ],
             capture_output=True,
             text=True,
@@ -459,7 +349,11 @@ def analyze_logs():
 # STATUS EVALUATION
 # ==========================================
 
-def evaluate_usage(value, warning, critical):
+def evaluate_usage(
+    value,
+    warning,
+    critical
+):
 
     if value is None:
         return "UNKNOWN"
@@ -489,7 +383,6 @@ def get_recommendations(
 
     recommendations = []
 
-    # CPU
     if cpu_status == "CRITICAL":
 
         recommendations.append(
@@ -503,11 +396,11 @@ def get_recommendations(
         )
 
 
-    # MEMORY
     if memory_status == "CRITICAL":
 
         recommendations.append(
-            "Check memory-consuming processes using: ps aux --sort=-%mem"
+            "Check memory-consuming processes using: "
+            "ps aux --sort=-%mem"
         )
 
     elif memory_status == "WARNING":
@@ -517,7 +410,6 @@ def get_recommendations(
         )
 
 
-    # DISK
     if disk_status == "CRITICAL":
 
         recommendations.append(
@@ -531,7 +423,6 @@ def get_recommendations(
         )
 
 
-    # NETWORK
     if not network:
 
         recommendations.append(
@@ -539,41 +430,36 @@ def get_recommendations(
         )
 
         recommendations.append(
-            "Test connectivity using: ping 8.8.8.8"
+            "Check external connectivity."
         )
 
 
-    # DNS
     if not dns:
 
         recommendations.append(
-            "Check DNS configuration and test with: nslookup google.com"
+            "Check DNS configuration and test hostname resolution."
         )
 
 
-    # LATENCY
-    if latency is not None:
+    if latency is not None and latency > 100:
 
-        if latency > 100:
-
-            recommendations.append(
-                "High network latency detected. "
-                "Check network stability and routing."
-            )
+        recommendations.append(
+            "High network latency detected. "
+            "Check network stability and routing."
+        )
 
 
-    # LOGS
     if log_analysis["ERROR"] > 0:
 
         recommendations.append(
-            "Review ERROR entries in logs.log for system troubleshooting."
+            "Review ERROR entries in logs.log."
         )
 
 
     if log_analysis["WARNING"] > 0:
 
         recommendations.append(
-            "Review WARNING entries in logs.log and monitor affected services."
+            "Review WARNING entries in logs.log."
         )
 
 
@@ -593,10 +479,6 @@ def get_recommendations(
 
 def generate_report():
 
-    # --------------------------------------
-    # COLLECT METRICS
-    # --------------------------------------
-
     cpu = get_cpu_usage()
 
     memory = get_memory_usage()
@@ -611,11 +493,7 @@ def generate_report():
 
     gateway = get_default_gateway()
 
-    latency_result = get_network_latency()
-
-    latency = latency_result["latency"]
-
-    latency_method = latency_result["method"]
+    latency = get_tcp_latency()
 
     log_analysis = analyze_logs()
 
@@ -713,14 +591,16 @@ def generate_report():
     if log_analysis["ERROR"] > 0:
 
         issues.append(
-            f"{log_analysis['ERROR']} ERROR entry/entries detected in logs."
+            f"{log_analysis['ERROR']} ERROR entry/entries "
+            "detected in logs."
         )
 
 
     if log_analysis["WARNING"] > 0:
 
         issues.append(
-            f"{log_analysis['WARNING']} WARNING entry/entries detected in logs."
+            f"{log_analysis['WARNING']} WARNING entry/entries "
+            "detected in logs."
         )
 
 
@@ -728,13 +608,11 @@ def generate_report():
     # OVERALL STATUS
     # --------------------------------------
 
-    if issues:
-
-        overall = "ATTENTION REQUIRED"
-
-    else:
-
-        overall = "HEALTHY"
+    overall = (
+        "ATTENTION REQUIRED"
+        if issues
+        else "HEALTHY"
+    )
 
 
     # --------------------------------------
@@ -865,7 +743,11 @@ def generate_report():
 
     report.append(
         "Latency Method        : "
-        + latency_method
+        + (
+            "TCP Connection"
+            if latency is not None
+            else "Unavailable"
+        )
     )
 
     report.append(
@@ -956,7 +838,7 @@ def generate_report():
     report.append(
         "Network Latency       : "
         + (
-            f"{latency} ms ({latency_method})"
+            f"{latency} ms (TCP Connection)"
             if latency is not None
             else "UNAVAILABLE"
         )
@@ -1066,9 +948,7 @@ def generate_report():
             encoding="utf-8"
         ) as file:
 
-            file.write(
-                final_report
-            )
+            file.write(final_report)
 
         print(
             f"\nReport saved to: {REPORT_FILE}"
