@@ -1,63 +1,88 @@
 # Linux System Health & Troubleshooting Automation
 
-An automated Linux system monitoring and troubleshooting tool built with Python.
+A Python-based Linux system monitoring and troubleshooting tool that automates common system health checks and generates a structured diagnostic report.
 
 ## Project Overview
 
-This project is designed to automate common Linux system health checks and provide useful diagnostic information for system support and troubleshooting.
+Linux system administrators and technical support engineers often need to collect multiple system metrics before troubleshooting an issue.
 
-The tool collects system information and monitors important resources such as CPU, memory, and disk usage.
+This project automates that initial diagnostic process by collecting system information, resource usage, network information, running processes, and log statistics.
 
-## Current Features
+The tool evaluates system health and provides troubleshooting recommendations based on detected conditions.
 
-- Linux system information
+## Features
+
+### System Monitoring
+- Hostname detection
+- Operating system identification
+- Kernel/release information
+- System architecture detection
 - CPU usage monitoring
 - Memory usage monitoring
 - Disk usage monitoring
-- Automated health report
-- Error handling for system checks
 
-## Planned Features
+### Network Diagnostics
+- Internet connectivity check
+- DNS resolution check
+- Network interface detection
+- Default gateway detection
+- TCP connectivity testing
 
-- Network connectivity diagnostics
-- DNS troubleshooting
-- Gateway detection
-- CPU/RAM/Disk threshold alerts
-- Automatic issue detection
-- Troubleshooting recommendations
-- Log generation
-- Automated diagnostic reports
+### Process Analysis
+- Displays top CPU-consuming processes
+- Shows process ID
+- Shows CPU usage
+- Shows memory usage
 
-## Technologies
+### Log Analysis
+- Counts INFO entries
+- Counts WARNING entries
+- Counts ERROR entries
+- Extracts detected error messages
 
-- Python
-- Linux
-- Bash commands
-- Git
-- GitHub
+### Automated Health Assessment
+The system evaluates resource usage using configurable thresholds:
 
-## Project Structure
+| Resource | Warning | Critical |
+|----------|---------|----------|
+| CPU | 70% | 90% |
+| Memory | 70% | 90% |
+| Disk | 75% | 90% |
+
+The tool generates an overall status:
+
+- HEALTHY
+- ATTENTION REQUIRED
+
+### Troubleshooting Recommendations
+
+The tool automatically generates recommendations when it detects:
+
+- High CPU usage
+- High memory usage
+- High disk usage
+- Network connectivity problems
+- DNS failures
+- Warning log entries
+- Error log entries
+
+## Sample Output
 
 ```text
-linux-system-health-automation/
-│
-├── README.md
-├── system_health.py
-│
-├── reports/
-│   └── sample_report.txt
-│
-└── docs/
-    └── troubleshooting.md
-Purpose
-The project is being developed as a practical Linux support and system administration portfolio project.
-It demonstrates:
-Linux troubleshooting
-Python automation
-System monitoring
-Command-line diagnostics
-Error handling
-Technical documentation
-Status
-🚧 Work in Progress
-The project is actively being developed and tested on a Linux environment.
+============================================================
+LINUX SYSTEM HEALTH & TROUBLESHOOTING REPORT
+============================================================
+
+[SYSTEM INFORMATION]
+
+[RESOURCE USAGE]
+
+[NETWORK DIAGNOSTICS]
+
+[TOP PROCESSES BY CPU USAGE]
+
+[LOG ANALYSIS]
+
+[DIAGNOSTIC SUMMARY]
+
+[TROUBLESHOOTING RECOMMENDATIONS]
