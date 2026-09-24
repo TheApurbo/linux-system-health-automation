@@ -109,7 +109,7 @@ def get_disk_usage():
 
 
 # ==========================================
-# NETWORK CHECK
+# NETWORK CONNECTIVITY
 # ==========================================
 
 def check_network():
@@ -120,6 +120,7 @@ def check_network():
         )
 
         connection.close()
+
         return True
 
     except (OSError, socket.timeout):
@@ -137,6 +138,95 @@ def check_dns():
 
     except socket.gaierror:
         return False
+
+
+# ==========================================
+# NETWORK INTERFACE DIAGNOSTICS
+# ==========================================
+
+def get_network_interfaces():
+    try:
+        result = subprocess.run(
+            ["ip", "-brief", "addr"],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+
+        if result.returncode != 0:
+            return "Unable to retrieve network interfaces."
+
+        output = result.stdout.strip()
+
+        if not output:
+            return "No network interfaces found."
+
+        return output
+
+    except (subprocess.SubprocessError, OSError):
+        return "Unable to retrieve network interfaces."
+
+
+# ==========================================
+# DEFAULT GATEWAY
+# ==========================================
+
+def get_default_gateway():
+    try:
+        result = subprocess.run(
+            ["ip", "route", "show", "default"],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+
+        if result.returncode != 0:
+            return "UNKNOWN"
+
+        output = result.stdout.strip()
+
+        if not output:
+            return "UNKNOWN"
+
+        parts = output.split()
+
+        if "via" in parts:
+            return parts[parts.index("via") + 1]
+
+        return "UNKNOWN"
+
+    except (subprocess.SubprocessError, OSError):
+        return "UNKNOWN"
+
+
+# ==========================================
+# PING / LATENCY TEST
+# ==========================================
+
+def ping_host(host="8.8.8.8"):
+    try:
+        result = subprocess.run(
+            ["ping", "-c", "1", "-W", "2", host],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+
+        if result.returncode != 0:
+            return None
+
+        for line in result.stdout.splitlines():
+
+            if "time=" in line:
+
+                latency = line.split("time=")[1].split()[0]
+
+                return float(latency)
+
+        return None
+
+    except (ValueError, subprocess.SubprocessError, OSError):
+        return None
 
 
 # ==========================================
@@ -187,6 +277,7 @@ def analyze_logs():
         return result
 
     try:
+
         with open(LOG_FILE, "r", encoding="utf-8") as file:
 
             for line in file:
@@ -237,42 +328,54 @@ def get_recommendations(
     disk_status,
     network,
     dns,
-    log_analysis
+    log_analysis,
+    ping_latency
 ):
 
     recommendations = []
 
+    # CPU
     if cpu_status == "CRITICAL":
+
         recommendations.append(
             "Check high-CPU processes using: top or htop"
         )
 
     elif cpu_status == "WARNING":
+
         recommendations.append(
             "Review running processes and unnecessary services."
         )
 
+    # MEMORY
     if memory_status == "CRITICAL":
+
         recommendations.append(
             "Check memory-consuming processes using: ps aux --sort=-%mem"
         )
 
     elif memory_status == "WARNING":
+
         recommendations.append(
             "Close unnecessary applications or services."
         )
 
+    # DISK
     if disk_status == "CRITICAL":
+
         recommendations.append(
             "Find large files using: du -sh /*"
         )
 
     elif disk_status == "WARNING":
+
         recommendations.append(
             "Clean unnecessary files, logs, and cached packages."
         )
 
+    # NETWORK
     if not network:
+
         recommendations.append(
             "Check network interfaces using: ip addr"
         )
@@ -281,22 +384,35 @@ def get_recommendations(
             "Test connectivity using: ping 8.8.8.8"
         )
 
+    # DNS
     if not dns:
+
         recommendations.append(
             "Check DNS configuration and test with: nslookup google.com"
         )
 
+    # PING
+    if ping_latency is not None and ping_latency > 100:
+
+        recommendations.append(
+            "High network latency detected. Check network stability and routing."
+        )
+
+    # LOGS
     if log_analysis["ERROR"] > 0:
+
         recommendations.append(
             "Review ERROR entries in logs.log for system troubleshooting."
         )
 
     if log_analysis["WARNING"] > 0:
+
         recommendations.append(
             "Review WARNING entries in logs.log and monitor affected services."
         )
 
     if not recommendations:
+
         recommendations.append(
             "No immediate troubleshooting action required."
         )
@@ -310,56 +426,148 @@ def get_recommendations(
 
 def generate_report():
 
+    # --------------------------------------
+    # COLLECT SYSTEM METRICS
+    # --------------------------------------
+
     cpu = get_cpu_usage()
+
     memory = get_memory_usage()
+
     disk = get_disk_usage()
 
     network = check_network()
+
     dns = check_dns()
+
+    network_interfaces = get_network_interfaces()
+
+    gateway = get_default_gateway()
+
+    ping_latency = ping_host()
 
     log_analysis = analyze_logs()
 
-    cpu_status = evaluate_usage(cpu, 70, 90)
-    memory_status = evaluate_usage(memory, 70, 90)
-    disk_status = evaluate_usage(disk, 80, 90)
+
+    # --------------------------------------
+    # EVALUATE RESOURCE STATUS
+    # --------------------------------------
+
+    cpu_status = evaluate_usage(
+        cpu,
+        70,
+        90
+    )
+
+    memory_status = evaluate_usage(
+        memory,
+        70,
+        90
+    )
+
+    disk_status = evaluate_usage(
+        disk,
+        80,
+        90
+    )
+
+
+    # --------------------------------------
+    # DETECT ISSUES
+    # --------------------------------------
 
     issues = []
 
     if cpu_status == "CRITICAL":
-        issues.append("CPU usage is critically high.")
+
+        issues.append(
+            "CPU usage is critically high."
+        )
 
     elif cpu_status == "WARNING":
-        issues.append("CPU usage is above the recommended level.")
+
+        issues.append(
+            "CPU usage is above the recommended level."
+        )
+
 
     if memory_status == "CRITICAL":
-        issues.append("Memory usage is critically high.")
+
+        issues.append(
+            "Memory usage is critically high."
+        )
 
     elif memory_status == "WARNING":
-        issues.append("Memory usage is above the recommended level.")
+
+        issues.append(
+            "Memory usage is above the recommended level."
+        )
+
 
     if disk_status == "CRITICAL":
-        issues.append("Disk usage is critically high.")
+
+        issues.append(
+            "Disk usage is critically high."
+        )
 
     elif disk_status == "WARNING":
-        issues.append("Disk usage is above the recommended level.")
+
+        issues.append(
+            "Disk usage is above the recommended level."
+        )
+
 
     if not network:
-        issues.append("Internet connectivity check failed.")
+
+        issues.append(
+            "Internet connectivity check failed."
+        )
+
 
     if not dns:
-        issues.append("DNS resolution failed.")
+
+        issues.append(
+            "DNS resolution failed."
+        )
+
+
+    if ping_latency is not None and ping_latency > 100:
+
+        issues.append(
+            f"High network latency detected: {ping_latency} ms."
+        )
+
 
     if log_analysis["ERROR"] > 0:
+
         issues.append(
             f"{log_analysis['ERROR']} ERROR entry/entries detected in logs."
         )
 
+
     if log_analysis["WARNING"] > 0:
+
         issues.append(
             f"{log_analysis['WARNING']} WARNING entry/entries detected in logs."
         )
 
-    overall = "ATTENTION REQUIRED" if issues else "HEALTHY"
+
+    # --------------------------------------
+    # OVERALL HEALTH
+    # --------------------------------------
+
+    if issues:
+
+        overall = "ATTENTION REQUIRED"
+
+    else:
+
+        overall = "HEALTHY"
+
+
+    # --------------------------------------
+    # RECOMMENDATIONS
+    # --------------------------------------
 
     recommendations = get_recommendations(
         cpu_status,
@@ -367,8 +575,10 @@ def generate_report():
         disk_status,
         network,
         dns,
-        log_analysis
+        log_analysis,
+        ping_latency
     )
+
 
     # ======================================
     # BUILD REPORT
@@ -377,17 +587,43 @@ def generate_report():
     report = []
 
     report.append("=" * 60)
-    report.append("          LINUX SYSTEM HEALTH REPORT")
+
+    report.append(
+        "          LINUX SYSTEM HEALTH REPORT"
+    )
+
     report.append("=" * 60)
 
-    report.append(f"Generated: {datetime.now()}")
 
-    report.append("\n[SYSTEM INFORMATION]")
+    report.append(
+        f"Generated: {datetime.now()}"
+    )
+
+
+    # ======================================
+    # SYSTEM INFORMATION
+    # ======================================
+
+    report.append(
+        "\n[SYSTEM INFORMATION]"
+    )
+
 
     for key, value in get_system_info().items():
-        report.append(f"{key}: {value}")
 
-    report.append("\n[RESOURCE HEALTH]")
+        report.append(
+            f"{key}: {value}"
+        )
+
+
+    # ======================================
+    # RESOURCE HEALTH
+    # ======================================
+
+    report.append(
+        "\n[RESOURCE HEALTH]"
+    )
+
 
     report.append(
         f"CPU Usage    : "
@@ -395,11 +631,13 @@ def generate_report():
         f"[{cpu_status}]"
     )
 
+
     report.append(
         f"Memory Usage : "
         f"{memory if memory is not None else 'UNKNOWN'}% "
         f"[{memory_status}]"
     )
+
 
     report.append(
         f"Disk Usage   : "
@@ -407,63 +645,190 @@ def generate_report():
         f"[{disk_status}]"
     )
 
-    report.append("\n[NETWORK HEALTH]")
+
+    # ======================================
+    # NETWORK HEALTH
+    # ======================================
+
+    report.append(
+        "\n[NETWORK HEALTH]"
+    )
+
 
     report.append(
         "Internet Connectivity : "
-        + ("CONNECTED" if network else "FAILED")
+        + (
+            "CONNECTED"
+            if network
+            else "FAILED"
+        )
     )
+
 
     report.append(
         "DNS Resolution        : "
-        + ("OK" if dns else "FAILED")
+        + (
+            "OK"
+            if dns
+            else "FAILED"
+        )
     )
 
-    report.append("\n[TOP PROCESSES BY CPU USAGE]")
 
-    report.append(get_top_processes())
-
-    report.append("\n[LOG ANALYSIS]")
+    # ======================================
+    # NETWORK DIAGNOSTICS
+    # ======================================
 
     report.append(
-        f"INFO entries    : {log_analysis['INFO']}"
+        "\n[NETWORK DIAGNOSTICS]"
     )
 
-    report.append(
-        f"WARNING entries : {log_analysis['WARNING']}"
-    )
 
     report.append(
-        f"ERROR entries   : {log_analysis['ERROR']}"
+        "Default Gateway       : "
+        + gateway
     )
+
+
+    report.append(
+        "Ping Latency          : "
+        + (
+            f"{ping_latency} ms"
+            if ping_latency is not None
+            else "FAILED"
+        )
+    )
+
+
+    report.append(
+        "\nNetwork Interfaces:"
+    )
+
+
+    report.append(
+        network_interfaces
+    )
+
+
+    # ======================================
+    # PROCESS ANALYSIS
+    # ======================================
+
+    report.append(
+        "\n[TOP PROCESSES BY CPU USAGE]"
+    )
+
+
+    report.append(
+        get_top_processes()
+    )
+
+
+    # ======================================
+    # LOG ANALYSIS
+    # ======================================
+
+    report.append(
+        "\n[LOG ANALYSIS]"
+    )
+
+
+    report.append(
+        f"INFO entries    : "
+        f"{log_analysis['INFO']}"
+    )
+
+
+    report.append(
+        f"WARNING entries : "
+        f"{log_analysis['WARNING']}"
+    )
+
+
+    report.append(
+        f"ERROR entries   : "
+        f"{log_analysis['ERROR']}"
+    )
+
 
     if log_analysis["ERROR_MESSAGES"]:
 
-        report.append("\nDetected ERROR messages:")
+        report.append(
+            "\nDetected ERROR messages:"
+        )
+
 
         for message in log_analysis["ERROR_MESSAGES"]:
-            report.append(f"- {message}")
 
-    report.append("\n[DIAGNOSTIC SUMMARY]")
+            report.append(
+                f"- {message}"
+            )
+
+
+    # ======================================
+    # DIAGNOSTIC SUMMARY
+    # ======================================
+
+    report.append(
+        "\n[DIAGNOSTIC SUMMARY]"
+    )
+
 
     if issues:
+
         for issue in issues:
-            report.append(f"- {issue}")
+
+            report.append(
+                f"- {issue}"
+            )
+
     else:
-        report.append("No major issues detected.")
 
-    report.append(f"\nOverall Status: {overall}")
+        report.append(
+            "No major issues detected."
+        )
 
-    report.append("\n[TROUBLESHOOTING RECOMMENDATIONS]")
+
+    report.append(
+        f"\nOverall Status: {overall}"
+    )
+
+
+    # ======================================
+    # RECOMMENDATIONS
+    # ======================================
+
+    report.append(
+        "\n[TROUBLESHOOTING RECOMMENDATIONS]"
+    )
+
 
     for recommendation in recommendations:
-        report.append(f"- {recommendation}")
 
-    report.append("\n" + "=" * 60)
-    report.append("             END OF HEALTH REPORT")
-    report.append("=" * 60)
+        report.append(
+            f"- {recommendation}"
+        )
+
+
+    # ======================================
+    # END REPORT
+    # ======================================
+
+    report.append(
+        "\n" + "=" * 60
+    )
+
+    report.append(
+        "             END OF HEALTH REPORT"
+    )
+
+    report.append(
+        "=" * 60
+    )
+
 
     final_report = "\n".join(report)
+
 
     # ======================================
     # PRINT REPORT
@@ -471,20 +836,40 @@ def generate_report():
 
     print(final_report)
 
+
     # ======================================
     # SAVE REPORT
     # ======================================
 
     try:
-        os.makedirs(REPORT_DIR, exist_ok=True)
 
-        with open(REPORT_FILE, "w", encoding="utf-8") as file:
-            file.write(final_report)
+        os.makedirs(
+            REPORT_DIR,
+            exist_ok=True
+        )
 
-        print(f"\nReport saved to: {REPORT_FILE}")
+
+        with open(
+            REPORT_FILE,
+            "w",
+            encoding="utf-8"
+        ) as file:
+
+            file.write(
+                final_report
+            )
+
+
+        print(
+            f"\nReport saved to: {REPORT_FILE}"
+        )
+
 
     except OSError as error:
-        print(f"\nUnable to save report: {error}")
+
+        print(
+            f"\nUnable to save report: {error}"
+        )
 
 
 # ==========================================
@@ -492,4 +877,5 @@ def generate_report():
 # ==========================================
 
 if __name__ == "__main__":
+
     generate_report()
